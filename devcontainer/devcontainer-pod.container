@@ -22,15 +22,20 @@ Volume=%h/.ssh:/home/developer/.ssh:ro,Z
 # Mount git config
 Volume=%h/.gitconfig:/home/developer/.gitconfig:ro,Z
 
-# Keep container running
-Exec=sleep infinity
+# Default working directory (what you land in when attaching)
+WorkingDir=/home/developer/devmachine
 
-# Run as current user (rootless podman)
-User=1000
-Group=1000
+# Start sshd (image CMD also does this; keep Exec explicit for quadlet)
+Exec=/entrypoint.sh
+
+# Run as root inside the container (still rootless on the host)
+# Needed so sshd can start and manage its files.
 
 # Environment variables
 Environment=TERM=xterm-256color
+
+# Expose SSH port (container 22 -> host 2222) bound to localhost
+PublishPort=127.0.0.1:2222:22
 
 # Security options
 SecurityLabelDisable=true

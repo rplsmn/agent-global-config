@@ -68,6 +68,34 @@ podman exec -it devcontainer bash
 
 ## VS Code Integration
 
+## SSH / Remote-SSH (Positron)
+
+This container runs an SSH server and publishes it on `localhost:2222`.
+
+If you want to authenticate with **Windows** SSH keys without copying them into WSL, add a volume mount in `devcontainer-pod.container` (edit the Windows username/path):
+```ini
+Volume=/mnt/c/Users/<you>/.ssh:/home/developer/.ssh-windows:ro
+```
+
+### Windows SSH config example
+In `C:\\Users\\<you>\\.ssh\\config`:
+```sshconfig
+Host devcontainer
+  HostName localhost
+  Port 2222
+  User developer
+  IdentityFile ~/.ssh/id_ed25519
+```
+
+### Quick diagnostic
+From WSL/Linux:
+```bash
+ssh -vvv devcontainer
+```
+If you see `Permission denied (publickey)`, verify the container has your public key in:
+`/etc/ssh/authorized_keys/developer`
+
+
 1. Install the "Dev Containers" extension in VS Code
 2. Open VS Code
 3. Press `F1` → "Dev Containers: Attach to Running Container"
