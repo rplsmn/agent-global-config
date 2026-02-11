@@ -1,0 +1,56 @@
+# Quadlet container file for systemd integration
+# Place this file in ~/.config/containers/systemd/
+# Then run: systemctl --user daemon-reload && systemctl --user enable --now devcontainer-pod
+
+[Unit]
+Description=Development Container for VS Code
+After=local-fs.target
+
+[Container]
+# Container image (build first with instructions in README)
+Image=localhost/devcontainer:latest
+
+# Container name
+ContainerName=devcontainer
+
+# Mount workspace from host
+Volume=%h/devmachine:/home/developer/devmachine:Z
+
+# Mount SSH keys (read-only for security)
+Volume=%h/.ssh:/home/developer/.ssh:ro,Z
+
+# Mount git config
+Volume=%h/.gitconfig:/home/developer/.gitconfig:ro,Z
+
+# Default working directory (what you land in when attaching)
+WorkingDir=/home/developer/devmachine
+
+# Start sshd (image CMD also does this; keep Exec explicit for quadlet)
+Exec=/entrypoint.sh
+
+# Run as root inside the container (still rootless on the host)
+# Needed so sshd can start and manage its files.
+
+# Environment variables
+Environment=TERM=xterm-256color
+
+# Expose SSH port (container 22 -> host 2222) bound to localhost
+PublishPort=127.0.0.1:2222:22
+
+# Security options
+SecurityLabelDisable=true
+
+# Timezone (inherit from host)
+Volume=/etc/localtime:/etc/localtime:ro
+
+[Service]
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Give time for graceful shutdown
+TimeoutStopSec=30
+
+[Install]
+# Start on user login
+WantedBy=default.target

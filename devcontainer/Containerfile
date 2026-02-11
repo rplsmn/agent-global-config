@@ -1,0 +1,148 @@
+# Dev Container for VS Code with Podman
+# Base: Ubuntu 24.04 LTS
+FROM docker.io/library/ubuntu:24.04
+
+ARG USERNAME=developer
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install base packages and dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Essential tools
+    curl \
+    wget \
+    git \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    sudo \
+    locales \
+    tzdata \
+    # Build essentials (needed for native modules)
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    # Python
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    # Editor and terminal utilities
+    vim \
+    nano \
+    less \
+    htop \
+    jq \
+    unzip \
+    zip \
+    # SSH server and client
+    openssh-server \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH server
+RUN mkdir -p /var/run/sshd /etc/ssh/authorized_keys \
+    && chmod 755 /etc/ssh/authorized_keys \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config \
+    && sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#UsePAM yes/UsePAM no/' /etc/ssh/sshd_config \
+    && echo 'AuthorizedKeysFile /etc/ssh/authorized_keys/%u' >> /etc/ssh/sshd_config
+
+# Set up locale
+RUN locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+# Install Node.js 22.x LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install R via r-rig
+RUN curl -L https://rig.r-pkg.org/deb/rig.gpg -o /etc/apt/trusted.gpg.d/rig.gpg \
+    && echo "deb http://rig.r-pkg.org/deb rig main" > /etc/apt/sources.list.d/rig.list \
+    && apt-get update \
+    && apt-get install -y r-rig \
+    && rm -rf /var/lib/apt/lists/* \
+    && rig add release \
+    && rig default release
+
+# Create non-root user with sudo access
+RUN if ! getent group ${USER_GID} >/dev/null; then groupadd --gid ${USER_GID} ${USERNAME}; fi \
+    && if ! id -u ${USERNAME} >/dev/null 2>&1; then useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${USERNAME}; fi \
+    && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/${USERNAME} \
+    && chmod 0440 /etc/sudoers.d/${USERNAME}
+
+# Switch to non-root user for remaining installations
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+
+# Install Rust (as user)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/home/${USERNAME}/.cargo/bin:${PATH}"
+
+# Install GitHub Copilot CLI
+RUN curl -fsSL https://gh.io/copilot-install | bash
+
+# Install Claude Code
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Install Mistral Vibe
+RUN curl -LsSf https://mistral.ai/vibe/install.sh | bash
+
+# Set up PATH for all installed tools (container processes)
+ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.cargo/bin:${PATH}"
+
+# Configure PATH in shell profile for interactive sessions
+RUN echo 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"' >> ~/.bashrc \
+    && echo 'source "$HOME/.local/bin/env" 2>/dev/null || true' >> ~/.bashrc
+
+# Create workspace directory (will be mounted from host)
+RUN mkdir -p /home/${USERNAME}/devmachine
+
+# Entrypoint must run as root to start sshd
+USER root
+
+# Entrypoint: build authorized_keys from mounted public keys and start sshd
+RUN printf '%s\n' \
+  '#!/bin/sh' \
+  'set -eu' \
+  '' \
+  '# If the container is started as non-root (e.g. for VS Code attach), re-exec as root.' \
+  'if [ "$(id -u)" -ne 0 ]; then exec sudo -n "$0" "$@"; fi' \
+  '' \
+  'mkdir -p /etc/ssh/authorized_keys /run/sshd' \
+  'chmod 755 /etc/ssh/authorized_keys' \
+  '' \
+  '# Ensure host keys exist (needed for sshd)' \
+  'ssh-keygen -A >/dev/null 2>&1 || true' \
+  '' \
+  '# Build authorized_keys for developer from mounted *.pub keys' \
+  ': > /etc/ssh/authorized_keys/developer' \
+  'if [ -f /home/developer/.ssh/id_ed25519.pub ]; then tr -d "\r" < /home/developer/.ssh/id_ed25519.pub >> /etc/ssh/authorized_keys/developer; fi' \
+  'if [ -f /home/developer/.ssh/id_rsa.pub ]; then tr -d "\r" < /home/developer/.ssh/id_rsa.pub >> /etc/ssh/authorized_keys/developer; fi' \
+  'if [ -d /home/developer/.ssh-windows ]; then for f in /home/developer/.ssh-windows/*.pub; do [ -f "$f" ] && tr -d "\r" < "$f" >> /etc/ssh/authorized_keys/developer; done; fi' \
+  '' \
+  '# sshd reads AuthorizedKeysFile as the target user, so it must be readable by that user' \
+  'chown developer:developer /etc/ssh/authorized_keys/developer' \
+  'chmod 600 /etc/ssh/authorized_keys/developer' \
+  '' \
+  'exec /usr/sbin/sshd -D -e' \
+  > /entrypoint.sh \
+  && chmod +x /entrypoint.sh
+
+# Expose SSH port
+EXPOSE 22
+
+# Default user for interactive sessions (sshd is still started as root via sudo in /entrypoint.sh)
+USER ${USERNAME}
+
+# Default working directory
+WORKDIR /home/${USERNAME}/devmachine
+
+CMD ["/entrypoint.sh"]
