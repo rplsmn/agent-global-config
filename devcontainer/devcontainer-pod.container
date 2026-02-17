@@ -1,6 +1,6 @@
 # Quadlet container file for systemd integration
 # Place this file in ~/.config/containers/systemd/
-# Then run: systemctl --user daemon-reload && systemctl --user enable --now devcontainer-pod
+# Then run: systemctl --user daemon-reload && systemctl --user start devcontainer-pod
 
 [Unit]
 Description=Development Container for VS Code
@@ -14,34 +14,34 @@ Image=localhost/devcontainer:latest
 ContainerName=devcontainer
 
 # Mount workspace from host
-Volume=%h/devmachine:/home/developer/devmachine:Z
+Volume=%h/devmachine:/home/developer
 
 # Mount SSH keys (read-only for security)
-Volume=%h/.ssh:/home/developer/.ssh:ro,Z
+Volume=%h/.ssh:/home/developer/.ssh:ro
+
+# Mount Windows SSH keys (for Positron/Windows IDE access)
+Volume=/mnt/c/Users/rsimon/.ssh:/home/developer/.ssh-windows:ro
 
 # Mount git config
-Volume=%h/.gitconfig:/home/developer/.gitconfig:ro,Z
+Volume=%h/.gitconfig:/home/developer/.gitconfig:ro
 
-# Default working directory (what you land in when attaching)
-WorkingDir=/home/developer/devmachine
-
-# Start sshd (image CMD also does this; keep Exec explicit for quadlet)
-Exec=/entrypoint.sh
-
-# Run as root inside the container (still rootless on the host)
-# Needed so sshd can start and manage its files.
+# Timezone (inherit from host)
+Volume=/etc/localtime:/etc/localtime:ro
 
 # Environment variables
 Environment=TERM=xterm-256color
 
-# Expose SSH port (container 22 -> host 2222) bound to localhost
-PublishPort=127.0.0.1:2222:22
+# Expose SSH port (container 22 -> host 2222)
+PublishPort=2222:22
 
-# Security options
-SecurityLabelDisable=true
+# Map host UID/GID to same UID/GID inside the container
+# Without this, rootless Podman remaps host user → container root,
+# making mounted volumes unwritable by the container's non-root user
+UserNS=keep-id
 
-# Timezone (inherit from host)
-Volume=/etc/localtime:/etc/localtime:ro
+# WSL compatibility - disable problematic features
+Notify=false
+PodmanArgs=--cgroups=no-conmon
 
 [Service]
 # Restart policy
@@ -52,5 +52,4 @@ RestartSec=10
 TimeoutStopSec=30
 
 [Install]
-# Start on user login
 WantedBy=default.target
