@@ -217,4 +217,3 @@ If running Podman inside WSL:
 - SSH private keys are mounted **read-only** (not copied into image)
 - Container runs as non-root user
 - Uses rootless Podman (no root privileges needed)
-- Git config mounted read-only

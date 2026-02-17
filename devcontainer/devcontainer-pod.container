@@ -22,9 +22,6 @@ Volume=%h/.ssh:/home/developer/.ssh:ro
 # Mount Windows SSH keys (for Positron/Windows IDE access)
 Volume=/mnt/c/Users/rsimon/.ssh:/home/developer/.ssh-windows:ro
 
-# Mount git config
-Volume=%h/.gitconfig:/home/developer/.gitconfig:ro
-
 # Timezone (inherit from host)
 Volume=/etc/localtime:/etc/localtime:ro
 
